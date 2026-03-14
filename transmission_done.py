@@ -7,7 +7,7 @@ torrent is done". Transmission injects these env vars:
 
     TR_TORRENT_NAME   — torrent name (folder or single file)
     TR_TORRENT_DIR    — directory the torrent was saved to
-    TR_TORRENT_ID     — numeric ID (unused here)
+    TR_TORRENT_ID     — numeric ID (used to update location via RPC after move)
     TR_TORRENT_HASH   — info hash (unused here)
 
 The script classifies the torrent and moves it into Movies/ or Shows/ using
@@ -29,6 +29,15 @@ from pathlib import Path
 # Add the script's own directory to the path so the import works regardless of
 # the cwd Transmission happens to use when it calls us.
 sys.path.insert(0, str(Path(__file__).parent))
+
+from transmission_rpc import Client  # noqa: E402
+
+from env import (  # noqa: E402
+    TRANSMISSION_HOST,
+    TRANSMISSION_PASSWORD,
+    TRANSMISSION_PORT,
+    TRANSMISSION_USERNAME,
+)
 
 from organize_media import (  # noqa: E402
     MOVIES_DIR,
@@ -63,12 +72,31 @@ logging.basicConfig(
 log = logging.info
 
 
+# ── Transmission RPC ──────────────────────────────────────────────────────────
+
+
+def set_transmission_location(torrent_id: int, new_dir: Path) -> None:
+    """Tell Transmission the torrent's files have moved, so it can keep seeding."""
+    try:
+        client = Client(
+            host=TRANSMISSION_HOST,
+            port=TRANSMISSION_PORT,
+            username=TRANSMISSION_USERNAME,
+            password=TRANSMISSION_PASSWORD,
+        )
+        client.move_torrent_data(torrent_id, str(new_dir), move=False)
+        log("   ✓ Transmission location updated → %s", new_dir)
+    except Exception as exc:
+        logging.warning("   ⚠ Could not update Transmission location: %s", exc)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
 def main() -> None:
     name = os.environ.get("TR_TORRENT_NAME", "").strip()
     directory = os.environ.get("TR_TORRENT_DIR", "").strip()
+    torrent_id = int(os.environ.get("TR_TORRENT_ID", "0") or "0")
 
     if not name or not directory:
         logging.error(
@@ -116,8 +144,10 @@ def main() -> None:
                 sidecar = item.with_suffix(ext)
                 if sidecar.exists():
                     safe_move(sidecar, dest.with_suffix(ext), dry_run)
+            set_transmission_location(torrent_id, dest.parent)
         else:
             process_show_dir(item, clean, year, dry_run)
+            log("   ℹ Transmission location not updated (directory torrent — files were restructured)")
         log("   → %s", SHOWS_DIR / clean)
 
     elif kind == "movie":
@@ -128,8 +158,10 @@ def main() -> None:
                 sidecar = item.with_suffix(ext)
                 if sidecar.exists():
                     safe_move(sidecar, dest.with_suffix(ext), dry_run)
+            set_transmission_location(torrent_id, dest.parent)
         else:
             process_movie_dir(item, clean, year, dry_run)
+            log("   ℹ Transmission location not updated (directory torrent — files were restructured)")
         log("   → %s", MOVIES_DIR / clean)
 
     else:
