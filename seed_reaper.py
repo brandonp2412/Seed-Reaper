@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+"""
+seed_reaper.py
+Automatically deletes torrents from Transmission if they're
+too old or they've sufficiently seeded enough already.
+"""
+
 from datetime import datetime, timedelta, timezone
 
 from transmission_rpc import Client
