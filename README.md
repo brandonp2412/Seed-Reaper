@@ -1,4 +1,6 @@
-# seed-reaper
+![Logo](logo.png)
+
+# Seed Reaper
 
 A collection of Python scripts for automating a home media server stack — Transmission + Jellyfin + Sonarr. Download a torrent, walk away, and come back to a fully organized library that's still seeding.
 
