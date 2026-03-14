@@ -528,8 +528,6 @@ def main():
     args = parser.parse_args()
 
     source = Path(args.source)
-    movies_out = Path(args.movies)
-    shows_out = Path(args.shows)
     dry_run = args.dry_run
 
     if dry_run:
