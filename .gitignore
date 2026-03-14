@@ -1,2 +1,23 @@
+# Credentials — never commit the real env.py
 env.py
-__pycache__
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Logs produced by transmission_done.py and seed_reaper.py
+*.log
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
