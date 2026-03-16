@@ -20,11 +20,10 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from env import SONARR_APIKEY
+from env import SONARR_URL, SONARR_APIKEY
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SONARR_URL      = "http://localhost:8989"
 JIKAN_URL       = "https://api.jikan.moe/v4"
 
 # How many of the top anime to sample from
@@ -110,12 +109,15 @@ def get_top_anime(limit: int = TOP_N) -> list[dict]:
 
 # ── Sonarr ────────────────────────────────────────────────────────────────────
 
+_SONARR_HEADERS = {"X-Api-Key": SONARR_APIKEY}
+
+
 def get_existing_tvdb_ids() -> set[int]:
     """Return set of tvdbIds already in Sonarr."""
     try:
         r = requests.get(
             f"{SONARR_URL}/api/v3/series",
-            headers={"X-Api-Key": SONARR_APIKEY},
+            headers=_SONARR_HEADERS,
             timeout=10,
         )
         r.raise_for_status()
@@ -131,7 +133,7 @@ def sonarr_lookup(title: str) -> dict | None:
         r = requests.get(
             f"{SONARR_URL}/api/v3/series/lookup",
             params={"term": title},
-            headers={"X-Api-Key": SONARR_APIKEY},
+            headers=_SONARR_HEADERS,
             timeout=15,
         )
         r.raise_for_status()
@@ -160,12 +162,11 @@ def add_to_sonarr(series: dict) -> bool:
         r = requests.post(
             f"{SONARR_URL}/api/v3/series",
             json=payload,
-            headers={"X-Api-Key": SONARR_APIKEY},
+            headers=_SONARR_HEADERS,
             timeout=15,
         )
         if r.status_code == 201:
             return True
-        # 400 with "already exists" is fine
         if r.status_code == 400:
             body = r.json()
             if any("already exists" in str(e) for e in body):

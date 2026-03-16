@@ -8,6 +8,7 @@ TRANSMISSION_USERNAME = "transmission"
 TRANSMISSION_PASSWORD = "your-transmission-password"
 
 # Sonarr — set to "" to disable Sonarr integration
+SONARR_URL   = "http://localhost:8989"
 SONARR_APIKEY = ""
 
 # TMDB — https://www.themoviedb.org/settings/api

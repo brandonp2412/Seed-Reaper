@@ -24,15 +24,21 @@ from pathlib import Path
 
 import requests
 
-from env import SONARR_APIKEY, TMDB_APIKEY
+from env import (
+    SONARR_URL,
+    SONARR_APIKEY,
+    TMDB_APIKEY,
+    TRANSMISSION_HOST,
+    TRANSMISSION_PORT,
+    TRANSMISSION_USERNAME,
+    TRANSMISSION_PASSWORD,
+)
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 SOURCE_DIR = Path("/mnt/media/Torrents")
 MOVIES_DIR = Path("/mnt/media/Movies")
 SHOWS_DIR = Path("/mnt/media/Shows")
-
-SONARR_URL = "http://localhost:8989"
 
 DRY_RUN = False  # overridden by --dry-run flag
 
@@ -185,6 +191,32 @@ def is_sonarr_managed(path: Path, sonarr_paths: set[Path]) -> bool:
         except ValueError:
             pass
     return False
+
+
+# ─── TRANSMISSION ─────────────────────────────────────────────────────────────
+
+
+def get_incomplete_torrent_names() -> set[str]:
+    """
+    Return the set of torrent names (folder/file names) that are not yet
+    100 % complete in Transmission. Items in this set should be skipped.
+    """
+    try:
+        from transmission_rpc import Client
+
+        client = Client(
+            host=TRANSMISSION_HOST,
+            port=TRANSMISSION_PORT,
+            username=TRANSMISSION_USERNAME,
+            password=TRANSMISSION_PASSWORD,
+        )
+        torrents = client.get_torrents()
+        incomplete = {t.name for t in torrents if t.percent_done < 1.0}
+        print(f"✓  Transmission: {len(torrents)} torrents, {len(incomplete)} incomplete")
+        return incomplete
+    except Exception as e:
+        print(f"⚠  Could not reach Transmission ({e}) — skipping incomplete check")
+        return set()
 
 
 # ─── TMDB ─────────────────────────────────────────────────────────────────────
@@ -542,6 +574,9 @@ def main():
     # Get Sonarr managed paths so we don't touch them
     sonarr_paths = get_sonarr_managed_paths()
 
+    # Get names of torrents still downloading in Transmission
+    incomplete_torrents = get_incomplete_torrent_names()
+
     unknowns = []
 
     # Iterate top-level items in source
@@ -560,6 +595,11 @@ def main():
         # Skip if Sonarr manages this
         if is_sonarr_managed(item, sonarr_paths):
             print(f"⏭  SONARR MANAGED, skipping: {name}")
+            continue
+
+        # Skip if an incomplete Transmission torrent exists for this item
+        if name in incomplete_torrents:
+            print(f"⏭  INCOMPLETE TORRENT, skipping: {name}")
             continue
 
         print(f"\n── {name}")
