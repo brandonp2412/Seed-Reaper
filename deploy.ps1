@@ -1,0 +1,1 @@
+scp *.py jellyfin:~/seed-reaper
