@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/brandon/seed-reaper/.venv/bin/python3
 """
 organize_media.py
 
@@ -212,7 +212,9 @@ def get_incomplete_torrent_names() -> set[str]:
         )
         torrents = client.get_torrents()
         incomplete = {t.name for t in torrents if t.percent_done < 1.0}
-        print(f"✓  Transmission: {len(torrents)} torrents, {len(incomplete)} incomplete")
+        print(
+            f"✓  Transmission: {len(torrents)} torrents, {len(incomplete)} incomplete"
+        )
         return incomplete
     except Exception as e:
         print(f"⚠  Could not reach Transmission ({e}) — skipping incomplete check")

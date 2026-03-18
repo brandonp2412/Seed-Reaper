@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/brandon/seed-reaper/.venv/bin/python3
 """
 transmission_done.py
 
@@ -147,7 +147,9 @@ def main() -> None:
             set_transmission_location(torrent_id, dest.parent)
         else:
             process_show_dir(item, clean, year, dry_run)
-            log("   ℹ Transmission location not updated (directory torrent — files were restructured)")
+            log(
+                "   ℹ Transmission location not updated (directory torrent — files were restructured)"
+            )
         log("   → %s", SHOWS_DIR / clean)
 
     elif kind == "movie":
@@ -161,7 +163,9 @@ def main() -> None:
             set_transmission_location(torrent_id, dest.parent)
         else:
             process_movie_dir(item, clean, year, dry_run)
-            log("   ℹ Transmission location not updated (directory torrent — files were restructured)")
+            log(
+                "   ℹ Transmission location not updated (directory torrent — files were restructured)"
+            )
         log("   → %s", MOVIES_DIR / clean)
 
     else:
