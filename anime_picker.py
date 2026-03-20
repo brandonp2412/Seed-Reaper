@@ -10,7 +10,6 @@ Run weekly via cron:
 Logs to ~/seed-reaper/anime_picker.log
 """
 
-import json
 import logging
 import random
 import sys
@@ -34,7 +33,7 @@ MIN_SCORE       = 7.5
 
 # Sonarr settings for new series
 QUALITY_PROFILE = 4          # HD-1080p
-ROOT_FOLDER     = "/var/lib/sonarr"
+ROOT_FOLDER     = "/mnt/media/Shows"
 SERIES_TYPE     = "anime"    # proper anime episode ordering
 MONITORED       = True
 SEARCH_ON_ADD   = True
