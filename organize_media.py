@@ -61,8 +61,11 @@ _JUNK_PATTERNS = [
     r"\.cc\s*",
     # Parenthetical release-info groups like (BD 1080p), (Dual-Audio), (HEVC-x265-10bit)
     r"\([^)]*(?:\d{3,4}p|hevc|x26[45]|blu.?ray|web.?dl|flac|aac|dts|hdr|sdr|dual.?audio)[^)]*\)",
-    # Trailing "- The Complete Series" / "Complete Collection" etc.
+    # Trailing "- The Complete Series" / "Complete Collection" / "- Complete" etc.
     r"\s*[-–]\s*(?:the\s+)?complete\s+(?:series|collection|season|blu[-\s]?ray\s+box\s+set)\b.*",
+    r"\s*[-–]\s*complete\s*$",
+    # Ordinal season suffixes: "2nd Season", "3rd Season" etc.
+    r"\s*\b\d+(?:st|nd|rd|th)\s+season\b.*",
 ]
 
 # Release-info tokens that appear after the real title
@@ -83,7 +86,27 @@ _RELEASE_TOKENS = re.compile(
 
 _YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
 _SXXEXX_RE = re.compile(r"\bS\d{2}E\d{2}\b", re.IGNORECASE)
-_SXX_RE = re.compile(r"\bS(?:eason\s*)?\d{1,2}\b", re.IGNORECASE)
+_SXX_RE = re.compile(r"\b(?:S(?:eason\s*)?\d{1,2}|\d+(?:st|nd|rd|th)\s+Season)\b", re.IGNORECASE)
+# Non-standard episode formats: "S2 - 09" or "2nd Season - 03"
+_S_DASH_EP_RE = re.compile(r"\bS(\d{1,2})\s*[-–]\s*(\d{1,2})\b")
+_ORDINAL_SEASON_EP_RE = re.compile(
+    r"\b(\d+)(?:st|nd|rd|th)\s+[Ss]eason\s*[-–]\s*(\d{1,2})\b", re.IGNORECASE
+)
+# Trailing " - NN" episode numbers appended to torrent folder names
+_TITLE_TRAILING_EP_RE = re.compile(r"\s*[-–]\s*\d{1,4}\s*$")
+
+
+def _sanitize_folder_name(name: str) -> str:
+    """Sanitize a TMDB title for use as a filesystem folder name."""
+    # Replace colons with space-dash (common Jellyfin convention)
+    name = name.replace(":", " -")
+    # Strip characters unsafe on most filesystems
+    name = re.sub(r'[<>"/\\|?*]', "", name)
+    # Remove leading/trailing dashes from -Title- style TMDB names
+    name = re.sub(r"^\s*-+\s*|\s*-+\s*$", "", name)
+    # Normalise whitespace
+    name = re.sub(r"\s{2,}", " ", name).strip()
+    return name
 
 
 def clean_title(raw: str) -> tuple[str, str | None]:
@@ -144,11 +167,24 @@ def clean_title(raw: str) -> tuple[str, str | None]:
 
 def looks_like_episode(name: str) -> bool:
     """True if the name contains SxxExx or similar episode markers."""
-    return bool(_SXXEXX_RE.search(name))
+    return bool(
+        _SXXEXX_RE.search(name)
+        or _S_DASH_EP_RE.search(name)
+        or _ORDINAL_SEASON_EP_RE.search(name)
+    )
 
 
 def extract_season_episode(name: str) -> tuple[int | None, int | None]:
+    # Standard S02E09
     m = re.search(r"S(\d{2})E(\d{2})", name, re.IGNORECASE)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    # S2 - 09 / S02 - 09
+    m = _S_DASH_EP_RE.search(name)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    # 2nd Season - 03
+    m = _ORDINAL_SEASON_EP_RE.search(name)
     if m:
         return int(m.group(1)), int(m.group(2))
     return None, None
@@ -263,14 +299,17 @@ def tmdb_search(title: str, year: str | None = None) -> dict | None:
     return result
 
 
-def classify_via_tmdb(title: str, year: str | None) -> str | None:
-    """Returns 'movie', 'show', or None if TMDB can't decide."""
-    # Try both endpoints and see which has a higher popularity/vote score
+def classify_via_tmdb(
+    title: str, year: str | None
+) -> tuple[str | None, str | None, str | None]:
+    """Returns (kind, canonical_title, canonical_year) or (None, None, None)."""
     best_kind = None
     best_score = -1
+    best_name = None
+    best_year = None
 
     if not TMDB_APIKEY:
-        return None
+        return None, None, None
 
     for endpoint, kind in [("search/movie", "movie"), ("search/tv", "tv")]:
         params = {"api_key": TMDB_APIKEY, "query": title, "include_adult": False}
@@ -289,11 +328,21 @@ def classify_via_tmdb(title: str, year: str | None) -> str | None:
                 if score > best_score:
                     best_score = score
                     best_kind = kind
+                    top = results[0]
+                    if kind == "movie":
+                        best_name = top.get("title") or top.get("original_title")
+                        date = top.get("release_date", "")
+                    else:
+                        best_name = top.get("name") or top.get("original_name")
+                        date = top.get("first_air_date", "")
+                    best_year = date[:4] if date else None
         except Exception:
             pass
         time.sleep(0.25)
 
-    return best_kind  # 'movie' | 'tv' | None
+    if best_name:
+        best_name = _sanitize_folder_name(best_name)
+    return best_kind, best_name, best_year
 
 
 # ─── HEURISTIC CLASSIFICATION ─────────────────────────────────────────────────
@@ -403,24 +452,27 @@ _KNOWN_MOVIES = {
 }
 
 
-def classify_item(name: str, path: Path) -> str:
+def classify_item(
+    name: str, path: Path
+) -> tuple[str, str | None, str | None]:
     """
     Classify a top-level item as 'movie', 'show', or 'unknown'.
+    Returns (kind, canonical_title_or_None, canonical_year_or_None).
     Uses: episode markers → known lists → TMDB.
     """
     # If it contains SxxExx it's definitely a show
     if looks_like_episode(name):
-        return "show"
+        return "show", None, None
 
     # If it's a directory and contains episode files, it's a show
     if path.is_dir():
         for f in path.rglob("*"):
             if f.suffix.lower() in VIDEO_EXTS and looks_like_episode(f.name):
-                return "show"
+                return "show", None, None
         # Directory of videos with no episode markers — probably a movie or season pack
         # Check for season indicators in folder name
         if _SXX_RE.search(name):
-            return "show"
+            return "show", None, None
 
     clean, year = clean_title(name)
     lower = clean.lower()
@@ -428,22 +480,49 @@ def classify_item(name: str, path: Path) -> str:
     # Check known lists
     for known in _KNOWN_SHOWS:
         if known in lower:
-            return "show"
+            return "show", None, None
     for known in _KNOWN_MOVIES:
         if known in lower:
-            return "movie"
+            return "movie", None, None
 
-    # Fall back to TMDB
-    kind = classify_via_tmdb(clean, year)
+    # Fall back to TMDB — also get canonical title/year
+    kind, canonical_title, canonical_year = classify_via_tmdb(clean, year)
     if kind == "tv":
-        return "show"
+        return "show", canonical_title, canonical_year
     if kind == "movie":
-        return "movie"
+        return "movie", canonical_title, canonical_year
 
-    return "unknown"
+    return "unknown", None, None
 
 
 # ─── DESTINATION PATH BUILDER ─────────────────────────────────────────────────
+
+
+def find_existing_show_folder(show_title: str, year: str | None) -> Path | None:
+    """
+    Return an existing folder in SHOWS_DIR whose name matches show_title
+    (with or without year), case-insensitively.  Prevents creating duplicate
+    folders like "Fallout" and "Fallout (2024)", or "Band of Brothers" and
+    "Band Of Brothers", when a show already landed under a slightly different
+    variant name.
+    Also strips trailing " - NN" episode suffixes from torrent folder names
+    like "Show Name - 09" so they route into the existing show folder.
+    """
+    if not SHOWS_DIR.exists():
+        return None
+    candidates = {show_title.lower()}
+    if year:
+        candidates.add(f"{show_title} ({year})".lower())
+    # Try without trailing episode number (e.g. "Sousou No Frieren - 09" → "Sousou No Frieren")
+    stripped = _TITLE_TRAILING_EP_RE.sub("", show_title).strip()
+    if stripped and stripped != show_title:
+        candidates.add(stripped.lower())
+        if year:
+            candidates.add(f"{stripped} ({year})".lower())
+    for item in SHOWS_DIR.iterdir():
+        if item.is_dir() and item.name.lower() in candidates:
+            return item
+    return None
 
 
 def show_dest(
@@ -452,10 +531,22 @@ def show_dest(
     """
     Build destination path for a show episode.
     Shows/Show Name (Year)/Season 01/filename
+
+    If the show already exists in SHOWS_DIR under a variant name (different
+    capitalisation or with/without year), route into that existing folder
+    instead of creating a new one.
     """
-    folder = show_title
-    if year:
-        folder = f"{show_title} ({year})"
+    # Strip trailing episode numbers from torrent-style names like "Show Name - 09"
+    show_title = _TITLE_TRAILING_EP_RE.sub("", show_title).strip()
+    existing = find_existing_show_folder(show_title, year)
+    if existing:
+        folder = existing.name
+    else:
+        folder = show_title
+        if year:
+            folder = f"{show_title} ({year})"
+        # Guard against empty parens (e.g. year was extracted as "")
+        folder = re.sub(r"\(\s*\)", "", folder).strip()
     season_folder = f"Season {season:02d}" if season else "Season 01"
     dest_name = _clean_filename(filename)
     return SHOWS_DIR / folder / season_folder / dest_name
@@ -469,6 +560,8 @@ def movie_dest(movie_title: str, year: str | None, filename: str) -> Path:
     folder = movie_title
     if year:
         folder = f"{movie_title} ({year})"
+    # Guard against empty parens
+    folder = re.sub(r"\(\s*\)", "", folder).strip()
     dest_name = _clean_filename(filename)
     return MOVIES_DIR / folder / dest_name
 
@@ -493,10 +586,39 @@ def _clean_filename(filename: str) -> str:
 # ─── MOVE LOGIC ───────────────────────────────────────────────────────────────
 
 
+def episode_already_exists(dest_season_dir: Path, season: int, episode: int) -> Path | None:
+    """
+    Return an existing video file if S{season:02d}E{episode:02d} is already
+    present in dest_season_dir under *any* filename.  Returns None if clear.
+    This catches cases where the same episode was downloaded twice under
+    different release-group names (e.g. ETHEL and a clean transcode copy).
+    """
+    if not dest_season_dir.exists():
+        return None
+    pattern = re.compile(rf"[Ss]{season:02d}[Ee]{episode:02d}")
+    for f in dest_season_dir.iterdir():
+        if f.is_file() and f.suffix.lower() in VIDEO_EXTS and pattern.search(f.name):
+            return f
+    return None
+
+
 def safe_move(src: Path, dest: Path, dry_run: bool) -> bool:
     if dest.exists():
         print(f"    ⚠  SKIP (already exists): {dest}")
         return False
+
+    # For video episode files, also check whether this S##E## already exists
+    # in the destination folder under a *different* filename.
+    if src.suffix.lower() in VIDEO_EXTS:
+        season, episode = extract_season_episode(src.name)
+        if season is not None and episode is not None:
+            existing = episode_already_exists(dest.parent, season, episode)
+            if existing:
+                print(
+                    f"    ⚠  SKIP (S{season:02d}E{episode:02d} already present as: {existing.name})"
+                )
+                return False
+
     if dry_run:
         print(f"    [DRY] {src} → {dest}")
         return True
@@ -606,8 +728,14 @@ def main():
 
         print(f"\n── {name}")
 
-        kind = classify_item(name, item)
+        kind, tmdb_title, tmdb_year = classify_item(name, item)
         clean, year = clean_title(name)
+
+        # Prefer TMDB canonical title/year for consistent folder names
+        if tmdb_title:
+            clean = tmdb_title
+        if tmdb_year:
+            year = tmdb_year
 
         print(f"   title={clean!r}  year={year}  kind={kind}")
 

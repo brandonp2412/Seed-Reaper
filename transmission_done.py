@@ -54,6 +54,7 @@ from organize_media import (  # noqa: E402
     process_show_dir,
     safe_move,
     show_dest,
+    find_existing_show_folder,
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -130,7 +131,14 @@ def main() -> None:
         return
 
     clean, year = clean_title(name)
-    kind = classify_item(name, item)
+    kind, tmdb_title, tmdb_year = classify_item(name, item)
+
+    # Prefer TMDB canonical title/year for consistent folder names
+    if tmdb_title:
+        clean = tmdb_title
+    if tmdb_year:
+        year = tmdb_year
+
     log("   title=%r  year=%s  kind=%s", clean, year, kind)
 
     dry_run = False  # always act for real when called by Transmission
