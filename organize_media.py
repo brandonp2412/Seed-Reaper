@@ -510,15 +510,20 @@ def find_existing_show_folder(show_title: str, year: str | None) -> Path | None:
     """
     if not SHOWS_DIR.exists():
         return None
-    candidates = {show_title.lower()}
+    candidates = set()
     if year:
+        # When we have a year, only match "Title (Year)" folders — never bare "Title".
+        # This prevents routing new episodes into year-less legacy folders.
         candidates.add(f"{show_title} ({year})".lower())
+    else:
+        candidates.add(show_title.lower())
     # Try without trailing episode number (e.g. "Sousou No Frieren - 09" → "Sousou No Frieren")
     stripped = _TITLE_TRAILING_EP_RE.sub("", show_title).strip()
     if stripped and stripped != show_title:
-        candidates.add(stripped.lower())
         if year:
             candidates.add(f"{stripped} ({year})".lower())
+        else:
+            candidates.add(stripped.lower())
     for item in SHOWS_DIR.iterdir():
         if item.is_dir() and item.name.lower() in candidates:
             return item
