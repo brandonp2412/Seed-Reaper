@@ -14,12 +14,13 @@ import logging
 import random
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from env import SONARR_URL, SONARR_APIKEY
+from env import SONARR_URL, SONARR_APIKEY, ANIME_QUALITY_PROFILE, ANIME_ROOT_FOLDER
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -32,8 +33,8 @@ TOP_N           = 50
 MIN_SCORE       = 7.5
 
 # Sonarr settings for new series
-QUALITY_PROFILE = 4          # HD-1080p
-ROOT_FOLDER     = "/mnt/media/Shows"
+QUALITY_PROFILE = ANIME_QUALITY_PROFILE
+ROOT_FOLDER     = ANIME_ROOT_FOLDER
 SERIES_TYPE     = "anime"    # proper anime episode ordering
 MONITORED       = True
 SEARCH_ON_ADD   = True
@@ -50,7 +51,7 @@ logging.basicConfig(
     format="%(asctime)s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-        logging.FileHandler(LOG_FILE),
+        RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3),
         logging.StreamHandler(sys.stdout),
     ],
 )

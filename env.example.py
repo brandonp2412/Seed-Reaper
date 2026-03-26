@@ -15,6 +15,10 @@ SONARR_APIKEY = ""
 # Set to "" to disable TMDB classification fallback
 TMDB_APIKEY = ""
 
+# anime_picker.py — Sonarr settings for auto-added anime
+ANIME_QUALITY_PROFILE = 4          # Sonarr quality profile ID (check Sonarr > Settings > Profiles)
+ANIME_ROOT_FOLDER     = "/mnt/media/Shows"
+
 # Reaper thresholds
 MAX_RATIO    = 2.0   # remove torrent when upload/download ratio reaches this
 MAX_AGE_DAYS = 30    # remove torrent after seeding this many days

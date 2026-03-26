@@ -259,46 +259,6 @@ def get_incomplete_torrent_names() -> set[str]:
 
 # ─── TMDB ─────────────────────────────────────────────────────────────────────
 
-_tmdb_cache: dict[str, dict | None] = {}
-
-
-def tmdb_search(title: str, year: str | None = None) -> dict | None:
-    """Search TMDB for title. Returns result dict or None."""
-    cache_key = f"{title}|{year}"
-    if cache_key in _tmdb_cache:
-        return _tmdb_cache[cache_key]
-
-    if not TMDB_APIKEY:
-        _tmdb_cache[cache_key] = None
-        return None
-
-    params = {"api_key": TMDB_APIKEY, "query": title, "include_adult": False}
-    if year:
-        params["year"] = year
-
-    result = None
-    for endpoint, kind in [("search/movie", "movie"), ("search/tv", "tv")]:
-        try:
-            r = requests.get(
-                f"https://api.themoviedb.org/3/{endpoint}",
-                params=params,
-                timeout=10,
-            )
-            r.raise_for_status()
-            results = r.json().get("results", [])
-            if results:
-                top = results[0]
-                top["_kind"] = kind
-                result = top
-                break
-        except Exception:
-            pass
-        time.sleep(0.25)  # be polite to TMDB
-
-    _tmdb_cache[cache_key] = result
-    return result
-
-
 def classify_via_tmdb(
     title: str, year: str | None
 ) -> tuple[str | None, str | None, str | None]:
@@ -402,12 +362,9 @@ _KNOWN_SHOWS = {
     "legend of the galactic heroes",
     "a knight of the seven kingdoms",
     "the penguin",
-    "hell on wheels",
     "blue planet",
     "blue planet ii",
     "the office",
-    "rome",
-    "prison break",
 }
 
 _KNOWN_MOVIES = {
@@ -690,6 +647,10 @@ def main():
 
     source = Path(args.source)
     dry_run = args.dry_run
+
+    global MOVIES_DIR, SHOWS_DIR
+    MOVIES_DIR = Path(args.movies)
+    SHOWS_DIR = Path(args.shows)
 
     if dry_run:
         print("=" * 60)

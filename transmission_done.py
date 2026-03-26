@@ -23,6 +23,7 @@ Usage (in Transmission settings):
 import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # ── Reuse all the shared logic from organize_media ────────────────────────────
@@ -66,7 +67,7 @@ logging.basicConfig(
     format="%(asctime)s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-        logging.FileHandler(LOG_FILE),
+        RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3),
         logging.StreamHandler(sys.stdout),
     ],
 )
