@@ -26,6 +26,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import requests
+
 # ── Reuse all the shared logic from organize_media ────────────────────────────
 # Add the script's own directory to the path so the import works regardless of
 # the cwd Transmission happens to use when it calls us.
@@ -38,6 +40,10 @@ from env import (  # noqa: E402
     TRANSMISSION_PASSWORD,
     TRANSMISSION_PORT,
     TRANSMISSION_USERNAME,
+    SONARR_URL,
+    SONARR_APIKEY,
+    RADARR_URL,
+    RADARR_APIKEY,
 )
 
 from organize_media import (  # noqa: E402
@@ -74,6 +80,40 @@ logging.basicConfig(
 log = logging.info
 
 
+# ── Arr queue check ───────────────────────────────────────────────────────────
+
+
+def is_arr_managed(torrent_hash: str) -> bool:
+    """
+    Return True if this torrent hash appears in Sonarr's or Radarr's download
+    queue, meaning one of them grabbed it and will handle the import itself.
+    """
+    if not torrent_hash:
+        return False
+    hash_upper = torrent_hash.upper()
+    for url, key, label in [
+        (SONARR_URL, SONARR_APIKEY, "Sonarr"),
+        (RADARR_URL, RADARR_APIKEY, "Radarr"),
+    ]:
+        if not key:
+            continue
+        try:
+            resp = requests.get(
+                f"{url}/api/v3/queue",
+                headers={"X-Api-Key": key},
+                params={"pageSize": 1000},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("records", []):
+                if item.get("downloadId", "").upper() == hash_upper:
+                    log("   ⏭ %s is managing this torrent — skipping", label)
+                    return True
+        except Exception as exc:
+            logging.warning("   ⚠ Could not reach %s queue: %s", label, exc)
+    return False
+
+
 # ── Transmission RPC ──────────────────────────────────────────────────────────
 
 
@@ -99,6 +139,7 @@ def main() -> None:
     name = os.environ.get("TR_TORRENT_NAME", "").strip()
     directory = os.environ.get("TR_TORRENT_DIR", "").strip()
     torrent_id = int(os.environ.get("TR_TORRENT_ID", "0") or "0")
+    torrent_hash = os.environ.get("TR_TORRENT_HASH", "").strip()
 
     if not name or not directory:
         logging.error(
@@ -114,6 +155,10 @@ def main() -> None:
 
     log("── New torrent: %s", name)
     log("   path: %s", item)
+
+    # Skip if Sonarr or Radarr grabbed this — they'll import it themselves
+    if is_arr_managed(torrent_hash):
+        return
 
     # Skip hidden items
     if name.startswith("."):

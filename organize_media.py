@@ -27,6 +27,8 @@ import requests
 from env import (
     SONARR_URL,
     SONARR_APIKEY,
+    RADARR_URL,
+    RADARR_APIKEY,
     TMDB_APIKEY,
     TRANSMISSION_HOST,
     TRANSMISSION_PORT,
@@ -255,6 +257,35 @@ def get_incomplete_torrent_names() -> set[str]:
     except Exception as e:
         print(f"⚠  Could not reach Transmission ({e}) — skipping incomplete check")
         return set()
+
+
+def get_arr_managed_torrent_names() -> set[str]:
+    """
+    Return torrent names currently tracked in Sonarr or Radarr's download queue.
+    These should be left alone so the arr app can import them itself.
+    """
+    managed = set()
+    for url, key, label in [
+        (SONARR_URL, SONARR_APIKEY, "Sonarr"),
+        (RADARR_URL, RADARR_APIKEY, "Radarr"),
+    ]:
+        if not key:
+            continue
+        try:
+            resp = requests.get(
+                f"{url}/api/v3/queue",
+                headers={"X-Api-Key": key},
+                params={"pageSize": 1000},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("records", []):
+                if title := item.get("title"):
+                    managed.add(title)
+        except Exception as e:
+            print(f"⚠  Could not reach {label} queue ({e})")
+    print(f"✓  Arr queues: {len(managed)} managed torrents")
+    return managed
 
 
 # ─── TMDB ─────────────────────────────────────────────────────────────────────
@@ -630,6 +661,7 @@ def process_movie_dir(src_dir: Path, movie_title: str, year: str | None, dry_run
 
 
 def main():
+    global MOVIES_DIR, SHOWS_DIR
     parser = argparse.ArgumentParser(
         description="Organise mixed media into Movies/ and Shows/"
     )
@@ -648,7 +680,6 @@ def main():
     source = Path(args.source)
     dry_run = args.dry_run
 
-    global MOVIES_DIR, SHOWS_DIR
     MOVIES_DIR = Path(args.movies)
     SHOWS_DIR = Path(args.shows)
 
@@ -666,6 +697,9 @@ def main():
 
     # Get names of torrents still downloading in Transmission
     incomplete_torrents = get_incomplete_torrent_names()
+
+    # Get torrent names currently queued in Sonarr/Radarr — let arr import those itself
+    arr_managed = get_arr_managed_torrent_names()
 
     unknowns = []
 
@@ -690,6 +724,11 @@ def main():
         # Skip if an incomplete Transmission torrent exists for this item
         if name in incomplete_torrents:
             print(f"⏭  INCOMPLETE TORRENT, skipping: {name}")
+            continue
+
+        # Skip if Sonarr or Radarr grabbed this torrent — they'll import it themselves
+        if name in arr_managed:
+            print(f"⏭  ARR MANAGED, skipping: {name}")
             continue
 
         print(f"\n── {name}")
