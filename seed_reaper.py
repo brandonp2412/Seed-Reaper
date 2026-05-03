@@ -1,4 +1,4 @@
-#!/home/brandon/seed-reaper/.venv/bin/python3
+#!/usr/bin/env python3
 """
 seed_reaper.py
 Automatically deletes torrents from Transmission if they're

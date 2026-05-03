@@ -1,4 +1,4 @@
-#!/home/brandon/seed-reaper/.venv/bin/python3
+#!/usr/bin/env python3
 """
 transmission_done.py
 
@@ -17,7 +17,7 @@ Logs to ~/seed-reaper/transmission_done.log so you can see what happened
 after the fact (Transmission doesn't show script output).
 
 Usage (in Transmission settings):
-    /usr/bin/python3 /home/brandon/seed-reaper/transmission_done.py
+    /usr/bin/python3 /path/to/seed-reaper/transmission_done.py
 """
 
 import logging

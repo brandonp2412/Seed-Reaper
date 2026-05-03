@@ -1,4 +1,4 @@
-#!/home/brandon/seed-reaper/.venv/bin/python3
+#!/usr/bin/env python3
 """
 organize_media.py
 
@@ -34,13 +34,16 @@ from env import (
     TRANSMISSION_PORT,
     TRANSMISSION_USERNAME,
     TRANSMISSION_PASSWORD,
+    SOURCE_DIR as _SOURCE_DIR,
+    MOVIES_DIR as _MOVIES_DIR,
+    SHOWS_DIR as _SHOWS_DIR,
 )
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-SOURCE_DIR = Path("/mnt/media/Torrents")
-MOVIES_DIR = Path("/mnt/media/Movies")
-SHOWS_DIR = Path("/mnt/media/Shows")
+SOURCE_DIR = Path(_SOURCE_DIR)
+MOVIES_DIR = Path(_MOVIES_DIR)
+SHOWS_DIR = Path(_SHOWS_DIR)
 
 DRY_RUN = False  # overridden by --dry-run flag
 

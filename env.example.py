@@ -8,15 +8,28 @@ TRANSMISSION_USERNAME = "transmission"
 TRANSMISSION_PASSWORD = "your-transmission-password"
 
 # Sonarr — set to "" to disable Sonarr integration
-SONARR_URL   = "http://localhost:8989"
+SONARR_URL    = "http://localhost:8989"
 SONARR_APIKEY = ""
+
+# Radarr — set to "" to disable Radarr integration
+RADARR_URL    = "http://localhost:7878"
+RADARR_APIKEY = ""
+
+# Jellyfin — set to "" to disable Jellyfin integration
+JELLYFIN_URL    = "http://localhost:8096"
+JELLYFIN_APIKEY = ""
 
 # TMDB — https://www.themoviedb.org/settings/api
 # Set to "" to disable TMDB classification fallback
 TMDB_APIKEY = ""
 
+# Media directories
+SOURCE_DIR = "/mnt/media/Torrents"
+MOVIES_DIR = "/mnt/media/Movies"
+SHOWS_DIR  = "/mnt/media/Shows"
+
 # anime_picker.py — Sonarr settings for auto-added anime
-ANIME_QUALITY_PROFILE = 4          # Sonarr quality profile ID (check Sonarr > Settings > Profiles)
+ANIME_QUALITY_PROFILE = 1          # Sonarr quality profile ID (check Sonarr > Settings > Profiles)
 ANIME_ROOT_FOLDER     = "/mnt/media/Shows"
 
 # Reaper thresholds

@@ -5,7 +5,7 @@ anime_picker.py
 Picks a random top anime from MyAnimeList (via Jikan API) and adds it to Sonarr.
 
 Run weekly via cron:
-    0 10 * * 1  /usr/bin/python3 /home/brandon/seed-reaper/anime_picker.py
+    0 10 * * 1  /usr/bin/python3 /path/to/seed-reaper/anime_picker.py
 
 Logs to ~/seed-reaper/anime_picker.log
 """
