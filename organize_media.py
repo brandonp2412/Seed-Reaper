@@ -305,7 +305,8 @@ def classify_via_tmdb(
     for endpoint, kind in [("search/movie", "movie"), ("search/tv", "tv")]:
         params = {"api_key": TMDB_APIKEY, "query": title, "include_adult": False}
         if year:
-            params["year"] = year
+            # TMDB uses "year" for movies, "first_air_date_year" for TV shows
+            params["year" if kind == "movie" else "first_air_date_year"] = year
         try:
             r = requests.get(
                 f"https://api.themoviedb.org/3/{endpoint}",
@@ -498,23 +499,31 @@ def find_existing_show_folder(show_title: str, year: str | None) -> Path | None:
     """
     if not SHOWS_DIR.exists():
         return None
-    candidates = set()
-    if year:
-        # When we have a year, only match "Title (Year)" folders — never bare "Title".
-        # This prevents routing new episodes into year-less legacy folders.
-        candidates.add(f"{show_title} ({year})".lower())
-    else:
-        candidates.add(show_title.lower())
-    # Try without trailing episode number (e.g. "Sousou No Frieren - 09" → "Sousou No Frieren")
+
+    title_lower = show_title.lower()
+    # Strip trailing episode number (e.g. "Sousou No Frieren - 09" → "Sousou No Frieren")
     stripped = _TITLE_TRAILING_EP_RE.sub("", show_title).strip()
-    if stripped and stripped != show_title:
-        if year:
-            candidates.add(f"{stripped} ({year})".lower())
-        else:
-            candidates.add(stripped.lower())
+    stripped_lower = stripped.lower() if stripped != show_title else None
+
     for item in SHOWS_DIR.iterdir():
-        if item.is_dir() and item.name.lower() in candidates:
+        if not item.is_dir():
+            continue
+        folder_lower = item.name.lower()
+        # Strip "(YYYY)" suffix from the folder name so we can compare base titles.
+        # This lets "Jujutsu Kaisen (2020)" match when we're looking for "Jujutsu Kaisen",
+        # and "Jujutsu Kaisen" match when we're looking for "Jujutsu Kaisen" with year=2020.
+        folder_base = re.sub(r'\s*\(\d{4}\)\s*$', '', item.name).strip().lower()
+
+        if (
+            folder_lower == title_lower                                         # exact match
+            or folder_base == title_lower                                       # folder has year, we don't
+            or (year and folder_lower == f"{title_lower} ({year})")             # our year matches exactly
+            or (stripped_lower and folder_lower == stripped_lower)              # stripped trailing ep
+            or (stripped_lower and folder_base == stripped_lower)               # stripped + folder has year
+            or (year and stripped_lower and folder_lower == f"{stripped_lower} ({year})")
+        ):
             return item
+
     return None
 
 
@@ -703,8 +712,22 @@ def main():
 
     unknowns = []
 
-    # Iterate top-level items in source
-    items = sorted(source.iterdir())
+    # Iterate top-level items in source, plus items inside arr app subdirs.
+    # radarr/ and sonarr/ subdirs hold downloads that arr apps should import;
+    # if an arr app drops a torrent from its queue without importing it, those
+    # files would otherwise be stuck forever — scanning them here lets us catch
+    # and move anything the arr app silently failed to import.
+    # The subdir directories themselves (e.g. "radarr") are skipped at the
+    # top level since we handle their children individually below.
+    arr_subdirs = ["radarr", "sonarr"]
+    arr_subdir_paths = {source / name for name in arr_subdirs}
+    items = [p for p in sorted(source.iterdir()) if p not in arr_subdir_paths]
+    for subdir_name in arr_subdirs:
+        subdir = source / subdir_name
+        if subdir.exists() and subdir.is_dir():
+            for child in sorted(subdir.iterdir()):
+                items.append(child)
+
     for item in items:
         name = item.name
 
